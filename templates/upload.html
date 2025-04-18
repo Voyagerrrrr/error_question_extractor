@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block title %}上传试卷{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="text-center">上传试卷</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="files" class="form-label">选择试卷图片上传 (PNG, JPG, GIF)</label>
+                        <input class="form-control" type="file" id="files" name="files" multiple accept="image/*" required>
+                        <div class="form-text">可以一次上传多张图片</div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-upload me-2"></i>上传试卷
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

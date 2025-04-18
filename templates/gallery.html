@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}历史{% endblock %}
+
+{% block extra_css %}
+<style>
+    .thumbnail {
+        width: 100%;
+        height: 200px;
+        object-fit: cover;
+        cursor: pointer;
+    }
+    .pdf-icon {
+        font-size: 5rem;
+        color: #dc3545;
+    }
+    .selected {
+        border: 3px solid #0d6efd;
+        opacity: 0.8;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h2>历史错题</h2>
+<p class="lead">查看和管理你的试卷和错题集</p>
+
+<ul class="nav nav-tabs mb-4" id="galleryTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="images-tab" data-bs-toggle="tab" data-bs-target="#images" type="button" role="tab">Images</button>
+    </li>
+    <li class="nav-item" role="presentation">
+        <button class="nav-link" id="pdfs-tab" data-bs-toggle="tab" data-bs-target="#pdfs" type="button" role="tab">PDFs</button>
+    </li>
+</ul>
+
+<div class="tab-content" id="galleryTabsContent">
+    <div class="tab-pane fade show active" id="images" role="tabpanel">
+        <form id="pdfForm" method="POST" action="{{ url_for('create_pdf') }}">
+            <div class="row mb-3">
+                <div class="col">
+                    <button type="submit" class="btn btn-primary" id="createPdfBtn" disabled>
+                        <i class="bi bi-file-earmark-pdf me-2"></i>根据选项生成错题集
+                    </button>
+                </div>
+            </div>
+            
+            {% if images %}
+                <div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4">
+                    {% for image in images %}
+                        <div class="col">
+                            <div class="card h-100">
+                                <input type="checkbox" class="d-none image-checkbox" name="selected_images" id="img-{{ image.id }}" value="{{ image.id }}">
+                                <label for="img-{{ image.id }}">
+                                    <img src="{{ url_for('static', filename='uploads/images/' + image.filename) }}" class="card-img-top thumbnail" alt="{{ image.filename }}">
+                                </label>
+                                <div class="card-body">
+                                    <h6 class="card-title">{{ image.filename }}</h6>
+                                    <p class="card-text text-muted small">
+                                        Uploaded: {{ image.upload_date.strftime('%Y-%m-%d %H:%M') }}
+                                    </p>
+                                </div>
+                                <div class="card-footer bg-white">
+                                    <div class="d-flex justify-content-between">
+                                        <a href="{{ url_for('download_image', image_id=image.id) }}" class="btn btn-sm btn-outline-primary">
+                                            <i class="bi bi-download"></i>
+                                        </a>
+                                        <form method="POST" action="{{ url_for('delete_image', image_id=image.id) }}" onsubmit="return confirm('确定删除这张试卷吗');">
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="alert alert-info">
+                    请先上传试卷<a href="{{ url_for('upload') }}">请上传</a>.
+                </div>
+            {% endif %}
+        </form>
+    </div>
+    
+    <div class="tab-pane fade" id="pdfs" role="tabpanel">
+        {% if pdfs %}
+            <div class="row row-cols-1 row-cols-md-3 row-cols-lg-4 g-4">
+                {% for pdf in pdfs %}
+                    <div class="col">
+                        <div class="card h-100">
+                            <div class="card-body text-center">
+                                <i class="bi bi-file-earmark-pdf pdf-icon"></i>
+                                <h6 class="card-title mt-2">{{ pdf.filename }}</h6>
+                                <p class="card-text text-muted small">
+                                    Created: {{ pdf.creation_date.strftime('%Y-%m-%d %H:%M') }}
+                                </p>
+                            </div>
+                            <div class="card-footer bg-white">
+                                <div class="d-flex justify-content-between">
+                                    <a href="{{ url_for('download_pdf', pdf_id=pdf.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="bi bi-download"></i> 下载
+                                    </a>
+                                    <form method="POST" action="{{ url_for('delete_pdf', pdf_id=pdf.id) }}" onsubmit="return confirm('确定删除这个错题集吗');">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">
+                                            <i class="bi bi-trash"></i> 删除
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="alert alert-info">
+                你还没有创建任何错题集
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Handle image selection for PDF creation
+        const checkboxes = document.querySelectorAll('.image-checkbox');
+        const createPdfBtn = document.getElementById('createPdfBtn');
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const label = document.querySelector(`label[for="img-${this.value}"]`);
+                if (this.checked) {
+                    label.querySelector('img').classList.add('selected');
+                } else {
+                    label.querySelector('img').classList.remove('selected');
+                }
+                
+                // Enable/disable create PDF button based on selection
+                const selectedCount = document.querySelectorAll('.image-checkbox:checked').length;
+                createPdfBtn.disabled = selectedCount === 0;
+            });
+        });
+    });
+</script>
+{% endblock %}

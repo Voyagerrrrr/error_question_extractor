@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}欢迎{% endblock %}
+
+{% block content %}
+<div class="jumbotron text-center mt-5">
+    <h1 class="display-4">欢迎使用错题助手</h1>
+    <p class="lead">上传你的试卷，将自动生成错题集</p>
+    <hr class="my-4">
+    <p>注册以开始使用</p>
+    <div class="d-grid gap-2 d-sm-flex justify-content-sm-center">
+        <a href="{{ url_for('register') }}" class="btn btn-primary btn-lg px-4 gap-3">注册</a>
+        <a href="{{ url_for('login') }}" class="btn btn-outline-secondary btn-lg px-4">登录</a>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-upload display-4 text-primary"></i>
+                <h3 class="card-title">上传试卷</h3>
+                <p class="card-text">可以上传多种格式的试卷 (JPG, PNG, GIF).</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-file-earmark-pdf display-4 text-primary"></i>
+                <h3 class="card-title">创建错题集</h3>
+                <p class="card-text">截取试卷中红笔标注的试题整合为错题集</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <i class="bi bi-collection display-4 text-primary"></i>
+                <h3 class="card-title">文件管理</h3>
+                <p class="card-text">查看，下载和删除所有你上传和生成的文件</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
