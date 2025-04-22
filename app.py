@@ -4,9 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import Config
-from fpdf import FPDF
 from datetime import datetime
-from PIL import Image
 import error_question_extraction
 from openai import OpenAI  
 from dotenv import load_dotenv
@@ -49,34 +47,40 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_IMAGE_EXTENSIONS']
 
-def create_pdf_from_images(image_paths, output_path, pdf_name,pdf_path):
+def create_pdf_from_images(image_paths, output_path, pdf_name, pdf_path):
     load_dotenv()
     openai_api_key = os.getenv("DASHSCOPE_API_KEY")  # 读取 OpenAI API Key
-    #print(f"api_key is {openai_api_key}")
-    base_url = os.getenv("BASE_URL")  # 读取 BASE YRL
+    base_url = os.getenv("BASE_URL")  # 读取 BASE URL
     model = os.getenv("MODEL")  # 读取 model
-    #print(f"model is {model}")
-    client = OpenAI(api_key=openai_api_key, base_url=base_url) # 创建OpenAI client
-    basic_msg =  [
+    
+    client = OpenAI(api_key=openai_api_key, base_url=base_url)  # 创建 OpenAI client
+    basic_msg = [
         {"role": "system", "content": """你是初中生错题提取助手"""}
     ]
-    pictures=[]
+    pictures = []
     for image_path in image_paths:
         pictures.append(image_path)
+    
     # 创建临时目录
     temp_dir = os.path.join(app.config['TEMP_FOLDER'], f"{datetime.now().strftime('%Y%m%d%H%M%S')}")
     os.makedirs(temp_dir, exist_ok=True)
-    image_num = error_question_extraction.extract_multiple_green_boxes(pictures, temp_dir)
-    latex_content = error_question_extraction.extact_error_question_of_latex_format(pictures,image_num)  # 发送用户输入到 OpenAI API
-    #print(f"\n🤖 OpenAI: {latex_content}")
+    cropped_image_names = error_question_extraction.extract_multiple_green_boxes_from_pictures(pictures, temp_dir)
+    latex_content = error_question_extraction.extact_error_question_of_latex_format(pictures)  # 发送用户输入到 OpenAI API  
+    cropped_image_pathes = [os.path.join(temp_dir, name) for name in cropped_image_names]
+    print(cropped_image_pathes)
+    latex_content =error_question_extraction.merge_graphics_to_latex(latex_content,cropped_image_pathes)             
+    # latex_content = add_latex_figures_with_images(latex_content,cropped_image_names)
+    print(f"\n🤖 OpenAI: {latex_content}")
     #将response写到result.tex文件中
-    error_question_extraction.write_to_latex_file(latex_content,temp_dir,pdf_name,pdf_path)
+    latex_file_path = 'result.tex'
+    error_question_extraction.write_to_latex_file(latex_content,latex_file_path,temp_dir)
+    error_question_extraction.format_latex_to_pdf(latex_file_path,temp_dir,pdf_name,pdf_path)
     pictures=[]
+
     try:
         shutil.rmtree(temp_dir)
     except Exception as e:
-        print(f"Error cleaning temp directory {temp_dir}: {e}")
-
+        print(f"Error cleaning temp directory {temp_dir}: {e}")  # 添加详细日志信息
 
 # 路由
 @app.route('/')
@@ -307,4 +311,4 @@ def delete_pdf(pdf_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    app.run(host='127.0.0.1', port=5000)
