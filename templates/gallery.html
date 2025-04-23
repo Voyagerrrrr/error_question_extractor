@@ -82,7 +82,42 @@
                 </div>
             {% endif %}
         </form>
+        
+        <!-- 加载动画放在这里 -->
+        <div id="loading-overlay" style="display: none;">
+            <div style="text-align: center; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); z-index: 9999; display: flex; justify-content: center; align-items: center;">
+                <div>
+                    <div class="spinner" style="width: 50px; height: 50px; border: 5px solid #f3f3f3; border-top: 5px solid #3498db; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    <p style="color: white; margin-top: 20px;">处理中，请稍候...</p>
+                </div>
+            </div>
+        </div>
     </div>
+    
+    <script>
+    document.getElementById('pdfForm').addEventListener('submit', function() {
+        // 显示加载动画
+        document.getElementById('loading-overlay').style.display = 'block';
+        
+        // 禁用按钮防止重复提交
+        document.getElementById('createPdfBtn').disabled = true;
+    });
+    
+    // 如果页面重新加载或表单提交完成，隐藏加载动画
+    window.addEventListener('load', function() {
+        document.getElementById('loading-overlay').style.display = 'none';
+    });
+    
+    // 添加CSS动画
+    var style = document.createElement('style');
+    style.textContent = `
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    `;
+    document.head.appendChild(style);
+    </script>
     
     <div class="tab-pane fade" id="pdfs" role="tabpanel">
         {% if pdfs %}
