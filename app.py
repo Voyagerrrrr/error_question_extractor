@@ -62,8 +62,9 @@ def create_pdf_from_images(image_paths, output_path, pdf_name, pdf_path):
     cropped_image_pathes = [os.path.join(temp_dir, name) for name in cropped_image_names]
 
     #组合文本和图片
-    latex_content =error_question_extraction.merge_graphics_to_latex(latex_content,cropped_image_pathes)             
-    print(f"\n🤖 OpenAI: {latex_content}")
+    if len(cropped_image_pathes) > 0 :
+        latex_content =error_question_extraction.merge_graphics_to_latex(latex_content,cropped_image_pathes)             
+        print(f"\n🤖 OpenAI: {latex_content}")
     
     #写出到.tex文件
     latex_file_path = 'result.tex'
@@ -308,4 +309,4 @@ def delete_pdf(pdf_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(host='0.0.0.0', port=5000)
+    app.run(debug=True)

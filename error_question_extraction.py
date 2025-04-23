@@ -139,7 +139,6 @@ def extact_error_question_of_latex_format(pictures:List[str])->str:
     message = make_user_message(pictures)
     #把message追加到basic_msg，不要改变basic_msg
     commit_message = basic_msg+[message]    
-    
     completion = client.chat.completions.create(model=model,messages=commit_message,stream=True,temperature=0)
     return get_latex_str_from_model_completion(completion)
 
@@ -169,8 +168,6 @@ def get_latex_str_from_model_completion(completion):
                 if delta.content is not None:
                     answer_content += delta.content
     latex_content = answer_content.strip()
-    #把latex_content中的image.png，替换成logo.png
-    latex_content=latex_content.replace("image.png", "logo.png")
     
     pattern = r"(\\documentclass.*?\\end{document})"
     match = re.search(pattern, latex_content, flags=re.DOTALL)
@@ -220,12 +217,28 @@ def merge_graphics_to_latex(src_latex:str,graphic_pathes:List[str])->str:
     返回:插入附图之后的latex
     """
     pictures_msg = generate_message_content_of_pictures(graphic_pathes)
-    #根据图片的路径获取图片的文件名到列表中
+    # 根据图片的路径获取图片的文件名到列表中
     picture_names = [os.path.basename(picture) for picture in graphic_pathes]
-    msg_content = [{"type": "text", "text": f""" 请把附图插入到{src_latex}合理的位置，生成新的latex文件,附图的文件名使用{picture_names} """}]
+    msg_content = [{
+        "type": "text", 
+        "text": f"""请把附图插入到{src_latex}合理的位置，生成新的latex文件,附图的文件名使用{picture_names}"""
+    }]
     msg_content.extend(pictures_msg)
-    message = {"role": "user",    "content": msg_content}
-    completion = client.chat.completions.create(model=model,messages=[message],stream=True,temperature=0)
+    message = {
+        "role": "user",
+        "content": msg_content
+    }
+    
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[message],
+        stream=True,
+        temperature=0
+    )
+
+    
+    
+    
     return get_latex_str_from_model_completion(completion=completion)
     
 def format_latex_to_pdf(latex_file:str,output_directory:str,pdf_name,pdf_path):
