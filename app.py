@@ -6,8 +6,6 @@ from werkzeug.utils import secure_filename
 from config import Config
 from datetime import datetime
 import error_question_extraction
-from openai import OpenAI  
-from dotenv import load_dotenv
 import shutil
 
 app = Flask(__name__)
@@ -48,15 +46,6 @@ def allowed_file(filename):
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_IMAGE_EXTENSIONS']
 
 def create_pdf_from_images(image_paths, output_path, pdf_name, pdf_path):
-    load_dotenv()
-    openai_api_key = os.getenv("DASHSCOPE_API_KEY")  # 读取 OpenAI API Key
-    base_url = os.getenv("BASE_URL")  # 读取 BASE URL
-    model = os.getenv("MODEL")  # 读取 model
-    
-    client = OpenAI(api_key=openai_api_key, base_url=base_url)  # 创建 OpenAI client
-    basic_msg = [
-        {"role": "system", "content": """你是初中生错题提取助手"""}
-    ]
     pictures = []
     for image_path in image_paths:
         pictures.append(image_path)
@@ -64,19 +53,27 @@ def create_pdf_from_images(image_paths, output_path, pdf_name, pdf_path):
     # 创建临时目录
     temp_dir = os.path.join(app.config['TEMP_FOLDER'], f"{datetime.now().strftime('%Y%m%d%H%M%S')}")
     os.makedirs(temp_dir, exist_ok=True)
+
+    #截取错题图片
     cropped_image_names = error_question_extraction.extract_multiple_green_boxes_from_pictures(pictures, temp_dir)
-    latex_content = error_question_extraction.extact_error_question_of_latex_format(pictures)  # 发送用户输入到 OpenAI API  
+
+    #提取文本信息
+    latex_content = error_question_extraction.extact_error_question_of_latex_format(pictures)  
     cropped_image_pathes = [os.path.join(temp_dir, name) for name in cropped_image_names]
-    print(cropped_image_pathes)
+
+    #组合文本和图片
     latex_content =error_question_extraction.merge_graphics_to_latex(latex_content,cropped_image_pathes)             
-    # latex_content = add_latex_figures_with_images(latex_content,cropped_image_names)
     print(f"\n🤖 OpenAI: {latex_content}")
-    #将response写到result.tex文件中
+    
+    #写出到.tex文件
     latex_file_path = 'result.tex'
     error_question_extraction.write_to_latex_file(latex_content,latex_file_path,temp_dir)
+
+    #编译为pdf
     error_question_extraction.format_latex_to_pdf(latex_file_path,temp_dir,pdf_name,pdf_path)
     pictures=[]
 
+    #清理临时文件
     try:
         shutil.rmtree(temp_dir)
     except Exception as e:
@@ -311,4 +308,4 @@ def delete_pdf(pdf_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(host='127.0.0.1', port=5000)
+    app.run(host='0.0.0.0', port=5000)
