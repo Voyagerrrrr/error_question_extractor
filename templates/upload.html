@@ -11,6 +11,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <label for="files" class="form-label">选择试卷图片上传 (PNG, JPG, GIF)</label>
                         <input class="form-control" type="file" id="files" name="files" multiple accept="image/*" required>

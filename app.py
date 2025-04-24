@@ -1,6 +1,10 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, session
+from flask_wtf.csrf import CSRFProtect
 from flask_sqlalchemy import SQLAlchemy
+from flask_limiter import Limiter
+import redis
+from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import Config
@@ -9,7 +13,10 @@ import error_question_extraction
 import shutil
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = '000000'  # 必须设置密钥
 app.config.from_object(Config)
+csrf = CSRFProtect(app)
+limiter = Limiter(app)
 Config.init_app(app)
 db = SQLAlchemy(app)
 
@@ -120,7 +127,9 @@ def register():
     
     return render_template('register.html')
 
+r = redis.Redis(host="localhost", port=6379, db=0)
 @app.route('/login', methods=['GET', 'POST'])
+@limiter.limit("5 per minute")  # 每分钟最多 5 次
 def login():
     if 'user_id' in session:
         return redirect(url_for('dashboard'))
@@ -128,15 +137,25 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        if r.get(f"lock:{username}"):
+            flash(f'账户已锁定，请 15 分钟后重试', 'danger')
+            return redirect(url_for('login'))
         user = User.query.filter_by(username=username).first()
         
         if user and user.check_password(password):
             session['user_id'] = user.id
             session['username'] = user.username
+            r.delete(f"failed:{username}")  # 登录成功，清除失败计数
             flash('登录成功!', 'success')
             return redirect(url_for('dashboard'))
         else:
-            flash('用户名或密码错误', 'danger')
+            failed_count = r.incr(f"failed:{username}")
+            if failed_count >= 5:  # 输错 5 次锁定
+                r.setex(f"lock:{username}", timedelta(minutes=15), "locked")
+                flash(f'错误次数过多，账户已锁定', 'danger')
+                return redirect(url_for('login'))
+
+            flash(f'用户名或密码错误（剩余尝试次数：{5 - failed_count}）', 'danger')
             return redirect(url_for('login'))
     
     return render_template('login.html')
@@ -309,4 +328,4 @@ def delete_pdf(pdf_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(debug=True)
+    app.run(host='0.0.0.0',port=5000)

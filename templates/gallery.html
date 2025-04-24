@@ -37,6 +37,7 @@
 <div class="tab-content" id="galleryTabsContent">
     <div class="tab-pane fade show active" id="images" role="tabpanel">
         <form id="pdfForm" method="POST" action="{{ url_for('create_pdf') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="row mb-3">
                 <div class="col">
                     <button type="submit" class="btn btn-primary" id="createPdfBtn" disabled>
