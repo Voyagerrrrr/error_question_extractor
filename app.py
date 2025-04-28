@@ -1,20 +1,24 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, session
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, session, jsonify, abort
 from flask_wtf.csrf import CSRFProtect
 from flask_sqlalchemy import SQLAlchemy
 from flask_limiter import Limiter
+from flask_moment import Moment
+import traceback
 import redis
+import base64
 from datetime import timedelta
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 from config import Config
 from datetime import datetime
-import error_question_extraction
+import error_question_extraction 
 import shutil
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = '000000'  # 必须设置密钥
 app.config.from_object(Config)
+moment = Moment(app)
 csrf = CSRFProtect(app)
 limiter = Limiter(app)
 Config.init_app(app)
@@ -51,41 +55,128 @@ class UserPDF(db.Model):
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_IMAGE_EXTENSIONS']
-
-def create_pdf_from_images(image_paths, output_path, pdf_name, pdf_path):
-    pictures = []
-    for image_path in image_paths:
-        pictures.append(image_path)
-    
+def extract_error_questions(image_paths):
+    """提取错题图片和文本信息"""
     # 创建临时目录
     temp_dir = os.path.join(app.config['TEMP_FOLDER'], f"{datetime.now().strftime('%Y%m%d%H%M%S')}")
     os.makedirs(temp_dir, exist_ok=True)
-
-    #截取错题图片
-    cropped_image_names = error_question_extraction.extract_multiple_green_boxes_from_pictures(pictures, temp_dir)
-
-    #提取文本信息
-    latex_content = error_question_extraction.extact_error_question_of_latex_format(pictures)  
-    cropped_image_pathes = [os.path.join(temp_dir, name) for name in cropped_image_names]
-
-    #组合文本和图片
-    if len(cropped_image_pathes) > 0 :
-        latex_content =error_question_extraction.merge_graphics_to_latex(latex_content,cropped_image_pathes)             
-        print(f"\n🤖 OpenAI: {latex_content}")
     
-    #写出到.tex文件
-    latex_file_path = 'result.tex'
-    error_question_extraction.write_to_latex_file(latex_content,latex_file_path,temp_dir)
+    # 截取错题图片
+    cropped_image_names = error_question_extraction.extract_multiple_green_boxes_from_pictures(image_paths, temp_dir)
+    cropped_image_pathes = [os.path.join(temp_dir, name) for name in cropped_image_names]
+    
+    # 提取文本信息
+    latex_content = error_question_extraction.extact_error_question_of_latex_format(image_paths)
+    
+    return {
+        'temp_dir': temp_dir,
+        'cropped_images': cropped_image_pathes,
+        'latex_content': latex_content
+    }
 
-    #编译为pdf
-    error_question_extraction.format_latex_to_pdf(latex_file_path,temp_dir,pdf_name,pdf_path)
-    pictures=[]
-
-    #清理临时文件
+def generate_pdf_from_selection(temp_dir, latex_content, selected_images, pdf_path):
+    """根据用户选择生成PDF"""
     try:
-        shutil.rmtree(temp_dir)
-    except Exception as e:
-        print(f"Error cleaning temp directory {temp_dir}: {e}")  # 添加详细日志信息
+        # 组合文本和图片
+        if selected_images and len(selected_images) > 0:
+            latex_content = error_question_extraction.merge_graphics_to_latex(latex_content, selected_images)
+        
+        # 写出到.tex文件
+        latex_file_path = 'result.tex'
+        error_question_extraction.write_to_latex_file(latex_content, latex_file_path, temp_dir)
+        
+        # 编译为pdf
+        pdf_name = f"pdf_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        exit_code = error_question_extraction.format_latex_to_pdf(latex_file_path, temp_dir, pdf_name, pdf_path)
+        
+    finally:
+        # 清理临时文件
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception as e:
+            print(f"Error cleaning temp directory {temp_dir}: {e}")
+    return exit_code
+
+@app.context_processor
+def inject_datetime():
+    from datetime import datetime, timedelta
+    return dict(datetime=datetime, timedelta=timedelta)
+
+@app.route('/preview_errors', methods=['POST'])
+def preview_errors():
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+    
+    user = User.query.get(session['user_id'])
+    selected_images = request.form.getlist('selected_images')
+    
+    if not selected_images:
+        flash('请选择至少一张试卷！', 'danger')
+        return redirect(url_for('gallery'))
+    
+    # 获取完整的图片路径
+    image_paths = []
+    for image_id in selected_images:
+        image = UserImage.query.filter_by(id=image_id, user_id=user.id).first()
+        if image:
+            image_paths.append(os.path.join(app.config['IMAGE_UPLOADS'], image.filename))
+    
+    if not image_paths:
+        flash('文件异常！', 'danger')
+        return redirect(url_for('gallery'))
+    
+    # 提取错题
+    extraction_result = extract_error_questions(image_paths)
+    
+    # 将临时目录存入session以便后续使用
+    session['temp_error_dir'] = extraction_result['temp_dir']
+    session['latex_content'] = extraction_result['latex_content']
+    
+    # 准备预览数据
+    preview_images = []
+    for idx, img_path in enumerate(extraction_result['cropped_images']):
+        # 将图片转为base64用于预览
+        with open(img_path, "rb") as img_file:
+            img_base64 = base64.b64encode(img_file.read()).decode('utf-8')
+        preview_images.append({
+            'id': idx,
+            'data': f"data:image/png;base64,{img_base64}",
+            'path': img_path
+        })
+    
+    return render_template('preview_errors.html', preview_images=preview_images)
+
+@app.route('/create_pdf_final', methods=['POST'])
+def create_pdf_final():
+    if 'user_id' not in session or 'temp_error_dir' not in session:
+        return redirect(url_for('login'))
+    
+    # 获取用户选择的图片
+    selected_preview_images = request.form.getlist('selected_errors')
+    latex_content = session.get('latex_content')
+    temp_dir = session['temp_error_dir']
+    
+    # 生成PDF
+    pdf_filename = f"pdf_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
+    pdf_path = os.path.join(app.config['PDF_UPLOADS'], pdf_filename)
+    
+    exit_code = generate_pdf_from_selection(temp_dir, latex_content, selected_preview_images, pdf_path)
+    if exit_code:
+        # 保存PDF记录到数据库
+        user = User.query.get(session['user_id'])
+        user_pdf = UserPDF(filename=pdf_filename, user_id=user.id)
+        db.session.add(user_pdf)
+        db.session.commit()
+        
+        # 清理session
+        session.pop('temp_error_dir', None)
+        session.pop('latex_content', None)
+        
+        flash('成功创建错题集！', 'success')
+        return redirect(url_for('gallery'))
+    else:
+        flash('创建异常', 'danger')
+        return redirect(url_for('gallery'))
 
 # 路由
 @app.route('/')
@@ -231,44 +322,6 @@ def gallery():
     
     return render_template('gallery.html', images=images, pdfs=pdfs)
 
-@app.route('/create_pdf', methods=['POST'])
-def create_pdf():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    
-    user = User.query.get(session['user_id'])
-    selected_images = request.form.getlist('selected_images')
-    
-    if not selected_images:
-        flash('请选择至少一张试卷！', 'danger')
-        return redirect(url_for('gallery'))
-    
-    # 获取完整的图片路径
-    image_paths = []
-    for image_id in selected_images:
-        image = UserImage.query.filter_by(id=image_id, user_id=user.id).first()
-        if image:
-            image_paths.append(os.path.join(app.config['IMAGE_UPLOADS'], image.filename))
-            print('已选择'+image_id)
-    
-    if not image_paths:
-        flash('文件异常！', 'danger')
-        return redirect(url_for('gallery'))
-    
-    # 创建PDF
-    pdf_filename = f"pdf_{datetime.now().strftime('%Y%m%d%H%M%S')}.pdf"
-    pdf_path = os.path.join(app.config['PDF_UPLOADS'], pdf_filename)
-    
-    create_pdf_from_images(image_paths, app.config['PDF_UPLOADS'],f"pdf_{datetime.now().strftime('%Y%m%d%H%M%S')}",pdf_path)
-    
-    # 保存PDF记录到数据库
-    user_pdf = UserPDF(filename=pdf_filename, user_id=user.id)
-    db.session.add(user_pdf)
-    db.session.commit()
-    
-    flash('成功创建错题集！', 'success')
-    return redirect(url_for('gallery'))
-
 @app.route('/download/image/<int:image_id>')
 def download_image(image_id):
     if 'user_id' not in session:
@@ -328,4 +381,4 @@ def delete_pdf(pdf_id):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    app.run(host='0.0.0.0',port=5000)
+    app.run(host='0.0.0.0',port=5000,debug=True)

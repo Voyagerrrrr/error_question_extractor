@@ -252,9 +252,13 @@ def format_latex_to_pdf(latex_file:str,output_directory:str,pdf_name,pdf_path):
     """
     #执行命令行 xelatex a.tex
     input_file_name = os.path.join(output_directory,latex_file)
-    os.system(f"cd {output_directory} && xelatex -jobname={pdf_name} {input_file_name}")
-    shutil.move(os.path.join(output_directory,pdf_name+'.pdf'), pdf_path)
-    print("\n📝 生成的 LaTeX 文件已转换为pdf文件")
+    exit_code =  os.system(f"cd {output_directory} && xelatex -halt-on-error -interaction=nonstopmode -jobname={pdf_name} {input_file_name}")
+    if exit_code:
+        shutil.move(os.path.join(output_directory,pdf_name+'.pdf'), pdf_path)
+        print("\n📝 生成的 LaTeX 文件已转换为pdf文件")
+    else:
+        print("\n📝 生成pdf出错了")
+    return exit_code
                  
 if __name__ == "__main__":
     import sys
